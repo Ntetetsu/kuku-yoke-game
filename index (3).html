@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>スペースシューター＋算数クイズ</title>
+  <style>
+    :root {
+      --enemy: #ff4757;
+      --player: #5352ed;
+      --item: #ffa502;
+      --bullet: #2ed573;
+      --text: #f1f2f6;
+      --panel: #2f3542;
+      --barrier: #70a1ff; /* バリアの色 */
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #0a0e27;
+      color: var(--text);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      /* モバイル対応 */
+      padding: 10px; 
+      box-sizing: border-box;
+      touch-action: none; /* ダブルタップズームなどを無効化 */
+    }
+    #container {
+      text-align:center;
+      width: 100%;
+      max-width: 500px;
+    }
+    h1 {
+      margin: 0 0 16px;
+      color: #ffa502;
+      font-size: 24px;
+      text-shadow: 0 0 10px rgba(255,165,2,0.5);
+    }
+    canvas {
+      background: linear-gradient(180deg, #0a0e27 0%, #1e2a4a 100%);
+      border: 3px solid #5352ed;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(83,82,237,0.4);
+      width: 100%; /* レスポンシブ対応 */
+      height: auto;
+      cursor: pointer;
+    }
+    .controls {
+      margin-top: 16px;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 15px;
+      border-radius: 8px;
+      background: #5352ed;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+      user-select: none; /* ボタンのテキスト選択を防ぐ */
+    }
+    button:hover {
+      background: #3742fa;
+      transform: translateY(-2px);
+    }
+    #shootBtn {
+      background-color: #2ed573;
+    }
+    #shootBtn:hover {
+      background-color: #26a860;
+    }
+    #info {
+      font-size: 14px;
+      color: #dfe4ea;
+      width: 100%;
+    }
+
+    /* クイズオーバーレイ */
+    #quizOverlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    #quizBox {
+      width: min(90vw, 500px);
+      background: var(--panel);
+      border: 3px solid #5352ed;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+      animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+      from { transform: translateY(-50px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    #quizTitle {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: #ffa502;
+    }
+    #quizQuestion {
+      font-size: 32px;
+      font-weight: 700;
+      margin: 16px 0 24px;
+      color: #f1f2f6;
+    }
+    .answerGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .answerBtn {
+      padding: 16px;
+      font-size: 20px;
+      font-weight: 700;
+      border-radius: 12px;
+      background: #3742fa;
+      color: white;
+      border: 2px solid #5352ed;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .answerBtn:hover {
+      background: #5352ed;
+      transform: scale(1.05);
+    }
+    .quizNote {
+      font-size: 13px;
+      color: #95afc0;
+      margin-top: 12px;
+    }
+
+    #startScreen {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(10,14,39,0.95);
+      z-index: 50;
+      animation: fadeIn 0.5s;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .startContent {
+      text-align: center;
+    }
+    .startTitle {
+      font-size: 48px;
+      font-weight: 700;
+      color: #ffa502;
+      margin-bottom: 24px;
+      text-shadow: 0 0 20px rgba(255,165,2,0.6);
+    }
+    .startHint {
+      font-size: 20px;
+      color: #dfe4ea;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>🚀 スペースシューター ＋ 算数クイズ 🎯</h1>
+    <canvas id="game" width="500" height="700"></canvas>
+    <div class="controls">
+      <div id="info">PC: ← → 移動 / スペースキー: 弾発射<br>モバイル: 画面左右タッチ: 移動 / ボタン: 弾発射</div>
+      <button id="shootBtn">弾を発射</button>
+      <button id="restartBtn">リスタート</button>
+    </div>
+  </div>
+
+  <!-- スタート画面 -->
+  <div id="startScreen">
+    <div class="startContent">
+      <div class="startTitle">SPACE SHOOTER</div>
+      <div class="startHint">スペースキーまたは画面タップでスタート</div>
+    </div>
+  </div>
+
+  <!-- クイズオーバーレイ -->
+  <div id="quizOverlay">
+    <div id="quizBox">
+      <div id="quizTitle">⭐ 算数チャレンジ</div>
+      <!-- クイズの内容はJavaScriptで更新される -->
+      <div id="quizQuestion">5 + 7 = ?</div> 
+      <div class="answerGrid">
+        <button class="answerBtn" data-idx="0">10</button>
+        <button class="answerBtn" data-idx="1">12</button>
+        <button class="answerBtn" data-idx="2">13</button>
+        <button class="answerBtn" data-idx="3">15</button>
+      </div>
+      <div class="quizNote">足し算正解でパワーアップ (3方向弾) / 掛け算正解でバリア (1回防御)</div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // ===== ゲーム設定 =====
+    const CONFIG = {
+      player: { w: 40, h: 40, speed: 5 },
+      enemy: { w: 35, h: 35, speed: 2, spawnInterval: 800 },
+      item: { w: 32, h: 32, speed: 2.5, spawnInterval: 5000 },
+      bullet: { w: 6, h: 16, speed: 8 },
+      powerupDuration: 8000,   // 3方向弾の持続時間
+      barrierDuration: 15000,  // バリアの最大持続時間
+      speedUpInterval: 15,
+      speedUpAmount: 0.4,
+      waveInterval: 12000,     // ウェーブ発生間隔 (12秒)
+      waveSize: 8,             // ウェーブでスポーンする敵の数
+      waveWarningDuration: 2000 // ウェーブ警告時間 (2秒)
+    };
+
+    // ===== ゲーム状態 =====
+    let gameState = {
+      player: { x: W/2 - 20, y: H - 100, w: CONFIG.player.w, h: CONFIG.player.h },
+      enemies: [],
+      items: [],
+      bullets: [],
+      particles: [],
+      score: 0,
+      kills: 0,             // 撃破数カウンター
+      itemsCollected: 0,
+      time: 0,
+      enemySpeed: CONFIG.enemy.speed,
+      level: 1,
+      powerupUntil: 0,
+      barrierUntil: 0,      // バリアの終了時間
+      barrierCount: 0,      // バリアの残り回数 (1で固定)
+      lastEnemySpawn: 0,
+      lastItemSpawn: 0,
+      
+      // Wave System States
+      waveTime: 0,          // 次のウェーブまでのタイマー
+      isWaving: false,      // ウェーブ処理中か (警告含む)
+      waveSpawnTimer: 0,    // ウェーブ内のスポーン間隔または警告タイマー
+      enemiesToSpawn: 0,    // ウェーブでスポーンさせる残り敵数
+      
+      started: false,
+      running: false,
+      gameOver: false,
+      inQuiz: false,
+      shake: 0,
+      keys: { left: false, right: false, space: false },
+      spacePressed: false
+    };
+
+    // ===== 入力処理 =====
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft') gameState.keys.left = true;
+      if (e.key === 'ArrowRight') gameState.keys.right = true;
+      if (e.key === ' ') {
+        e.preventDefault();
+        if (!gameState.started) {
+          startGame();
+        } else if (!gameState.spacePressed && !gameState.inQuiz && !gameState.gameOver) {
+          shootBullet();
+        }
+        gameState.keys.space = true;
+        gameState.spacePressed = true;
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      if (e.key === 'ArrowLeft') gameState.keys.left = false;
+      if (e.key === 'ArrowRight') gameState.keys.right = false;
+      if (e.key === ' ') {
+        gameState.keys.space = false;
+        gameState.spacePressed = false;
+      }
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+    // ===== タッチ操作 =====
+    const handleTouch = (e) => {
+        e.preventDefault();
+        if (!gameState.started) {
+            startGame();
+            return;
+        }
+        if (e.touches.length > 0) {
+            const touchX = e.touches[0].clientX;
+            const canvasRect = canvas.getBoundingClientRect();
+            const touchPosInCanvas = (touchX - canvasRect.left) / canvasRect.width;
+
+            if (touchPosInCanvas < 0.5) {
+                gameState.keys.left = true;
+                gameState.keys.right = false;
+            } else {
+                gameState.keys.left = false;
+                gameState.keys.right = true;
+            }
+        } else {
+            gameState.keys.left = false;
+            gameState.keys.right = false;
+        }
+    };
+    
+    canvas.addEventListener('touchstart', handleTouch);
+    canvas.addEventListener('touchmove', handleTouch);
+    canvas.addEventListener('touchend', handleTouch);
+    canvas.addEventListener('touchcancel', handleTouch);
+
+    const shootBtn = document.getElementById('shootBtn');
+    const handleShootPress = (e) => {
+      e.preventDefault();
+      if (gameState.started && !gameState.inQuiz && !gameState.gameOver) {
+        shootBullet();
+      }
+    };
+    shootBtn.addEventListener('click', handleShootPress);
+    shootBtn.addEventListener('touchstart', handleShootPress);
+
+    // スタート画面のタップ対応
+    document.getElementById('startScreen').addEventListener('click', () => {
+        if (!gameState.started) startGame();
+    });
+
+    // ===== ゲーム開始 =====
+    function startGame() {
+      gameState.started = true;
+      gameState.running = true;
+      document.getElementById('startScreen').style.display = 'none';
+      // 初回ウェーブタイマーをリセット
+      gameState.waveTime = 0; 
+    }
+
+    // ===== リセット =====
+    function resetGame() {
+      gameState = {
+        player: { x: W/2 - 20, y: H - 100, w: CONFIG.player.w, h: CONFIG.player.h },
+        enemies: [],
+        items: [],
+        bullets: [],
+        particles: [],
+        score: 0,
+        kills: 0,
+        itemsCollected: 0,
+        time: 0,
+        enemySpeed: CONFIG.enemy.speed,
+        level: 1,
+        powerupUntil: 0,
+        barrierUntil: 0,
+        barrierCount: 0,
+        lastEnemySpawn: 0,
+        lastItemSpawn: 0,
+        waveTime: 0,
+        isWaving: false,
+        waveSpawnTimer: 0,
+        enemiesToSpawn: 0,
+        started: true,
+        running: true,
+        gameOver: false,
+        inQuiz: false,
+        shake: 0,
+        keys: { left: false, right: false, space: false },
+        spacePressed: false
+      };
+      document.getElementById('startScreen').style.display = 'none';
+      closeQuiz();
+    }
+
+    // ===== 弾発射 =====
+    function shootBullet() {
+      if (!gameState.running || gameState.gameOver || gameState.inQuiz) return;
+      const isPowered = Date.now() < gameState.powerupUntil;
+      // 中央弾
+      gameState.bullets.push({
+        x: gameState.player.x + CONFIG.player.w/2 - CONFIG.bullet.w/2,
+        y: gameState.player.y,
+        w: CONFIG.bullet.w,
+        h: CONFIG.bullet.h
+      });
+      
+      if (isPowered) {
+        // パワーアップ中は3方向
+        gameState.bullets.push({
+          x: gameState.player.x + CONFIG.player.w/2 - CONFIG.bullet.w/2 - 20,
+          y: gameState.player.y,
+          w: CONFIG.bullet.w,
+          h: CONFIG.bullet.h,
+          vx: -2
+        });
+        gameState.bullets.push({
+          x: gameState.player.x + CONFIG.player.w/2 - CONFIG.bullet.w/2 + 20,
+          y: gameState.player.y,
+          w: CONFIG.bullet.w,
+          h: CONFIG.bullet.h,
+          vx: 2
+        });
+      }
+    }
+
+    // ===== スポーン =====
+    function spawnEnemy() {
+      const x = Math.random() * (W - CONFIG.enemy.w);
+      gameState.enemies.push({
+        x, y: -CONFIG.enemy.h,
+        w: CONFIG.enemy.w,
+        h: CONFIG.enemy.h,
+        vx: (Math.random() - 0.5) * 2
+      });
+    }
+
+    function spawnItem() {
+      const x = Math.random() * (W - CONFIG.item.w);
+      gameState.items.push({
+        x, 
+        y: -CONFIG.item.h,
+        w: CONFIG.item.w,
+        h: CONFIG.item.h
+      });
+    }
+
+    // ===== パーティクル =====
+    function createExplosion(x, y, color, count = 20) {
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count;
+        const speed = 2 + Math.random() * 3;
+        gameState.particles.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1,
+          color,
+          size: 3 + Math.random() * 3
+        });
+      }
+      gameState.shake = Math.min(10, gameState.shake + 4);
+    }
+
+    // ===== 衝突判定 =====
+    function collides(a, b) {
+      return a.x < b.x + b.w &&
+             a.x + a.w > b.x &&
+             a.y < b.y + b.h &&
+             a.y + a.h > b.y;
+    }
+
+    // ===== クイズ =====
+    const quizOverlay = document.getElementById('quizOverlay');
+    const quizQuestion = document.getElementById('quizQuestion');
+    const answerBtns = Array.from(document.querySelectorAll('.answerBtn'));
+    let currentQuiz = null;
+
+    function generateQuiz() {
+      // 足し算と掛け算のみを使用
+      const types = ['add', 'multiply']; 
+      const type = types[Math.floor(Math.random() * types.length)];
+      
+      let a, b, answer;
+      
+      if (type === 'add') {
+        a = Math.floor(Math.random() * 30) + 1;
+        b = Math.floor(Math.random() * 30) + 1;
+        answer = a + b;
+        quizQuestion.textContent = `${a} + ${b} = ?`;
+      } else { // 'multiply'
+        a = Math.floor(Math.random() * 9) + 2;
+        b = Math.floor(Math.random() * 9) + 2;
+        answer = a * b;
+        quizQuestion.textContent = `${a} × ${b} = ?`;
+      }
+      
+      const choices = new Set([answer]);
+      while (choices.size < 4) {
+        const wrong = answer + Math.floor(Math.random() * 10) - 5;
+        if (wrong > 0 && wrong !== answer) choices.add(wrong);
+      }
+      
+      const shuffled = Array.from(choices).sort(() => Math.random() - 0.5);
+      
+      return { type, answer, choices: shuffled }; 
+    }
+
+    function openQuiz() {
+      gameState.inQuiz = true;
+      gameState.running = false;
+      currentQuiz = generateQuiz();
+      
+      answerBtns.forEach((btn, idx) => {
+        btn.textContent = currentQuiz.choices[idx];
+      });
+      
+      quizOverlay.style.display = 'grid';
+    }
+
+    function closeQuiz() {
+      quizOverlay.style.display = 'none';
+      gameState.inQuiz = false;
+      if (!gameState.gameOver) {
+        setTimeout(() => gameState.running = true, 100);
+      }
+    }
+
+    answerBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!currentQuiz) return;
+        const idx = Number(btn.dataset.idx);
+        const chosen = currentQuiz.choices[idx];
+        
+        if (chosen === currentQuiz.answer) {
+          gameState.score += 100;
+          
+          if (currentQuiz.type === 'add') {
+            // 足し算正解: パワーアップ (3方向弾 8秒)
+            gameState.powerupUntil = Date.now() + CONFIG.powerupDuration;
+            createExplosion(gameState.player.x + CONFIG.player.w/2, 
+                           gameState.player.y + CONFIG.player.h/2, 
+                           '#2ed573', 30); 
+          } else if (currentQuiz.type === 'multiply') {
+            // 掛け算正解: バリア (1回防御 15秒)
+            gameState.barrierUntil = Date.now() + CONFIG.barrierDuration;
+            gameState.barrierCount = 1; 
+            createExplosion(gameState.player.x + CONFIG.player.w/2, 
+                           gameState.player.y + gameState.player.h/2, 
+                           '#70a1ff', 30); // バリアの色
+          }
+          
+        } else {
+          gameState.score += 20;
+        }
+        
+        closeQuiz();
+      });
+    });
+
+    // ===== 更新 =====
+    function update(dt) {
+      if (!gameState.running || gameState.gameOver) return;
+
+      gameState.time += dt;
+
+      // プレイヤー移動
+      if (gameState.keys.left) {
+        gameState.player.x -= CONFIG.player.speed;
+      }
+      if (gameState.keys.right) {
+        gameState.player.x += CONFIG.player.speed;
+      }
+      gameState.player.x = Math.max(0, Math.min(W - CONFIG.player.w, gameState.player.x));
+
+      // 難易度上昇
+      const newLevel = Math.floor(gameState.time / 1000 / CONFIG.speedUpInterval) + 1;
+      if (newLevel > gameState.level) {
+        gameState.level = newLevel;
+        gameState.enemySpeed += CONFIG.speedUpAmount;
+      }
+
+      // バリアのタイマーチェック
+      if (Date.now() > gameState.barrierUntil) {
+          gameState.barrierCount = 0;
+      }
+
+      // ウェーブシステム判定
+      if (!gameState.isWaving) {
+          gameState.waveTime += dt;
+      }
+      
+      // ウェーブ開始トリガー
+      if (gameState.waveTime >= CONFIG.waveInterval && !gameState.isWaving) {
+          gameState.isWaving = true;
+          gameState.waveTime = 0; // ウェーブタイマーをリセット
+          gameState.enemiesToSpawn = CONFIG.waveSize; // スポーンさせる敵の数を設定
+          gameState.waveSpawnTimer = CONFIG.waveWarningDuration; // 警告時間 (2秒)
+      }
+      
+      // ウェーブ中の処理
+      if (gameState.isWaving) {
+          if (gameState.waveSpawnTimer > 0) {
+              gameState.waveSpawnTimer -= dt; // 警告カウントダウン
+          } else {
+              // スポーン処理
+              if (gameState.enemiesToSpawn > 0) {
+                  spawnEnemy();
+                  gameState.enemiesToSpawn--;
+                  // ウェーブ内の次のスポーンまでの待ち時間
+                  gameState.waveSpawnTimer = 200; 
+              } else {
+                  // ウェーブ終了
+                  gameState.isWaving = false;
+              }
+          }
+      } else {
+          // 通常の敵スポーン (ウェーブ中でない場合のみ)
+          if (gameState.time - gameState.lastEnemySpawn > CONFIG.enemy.spawnInterval) {
+            spawnEnemy();
+            gameState.lastEnemySpawn = gameState.time;
+            
+            // 難易度が上がると追加スポーン
+            if (Math.random() < gameState.level * 0.1) {
+              spawnEnemy();
+            }
+          }
+      }
+
+      // アイテムスポーン
+      if (gameState.time - gameState.lastItemSpawn > CONFIG.item.spawnInterval) {
+        spawnItem();
+        gameState.lastItemSpawn = gameState.time;
+      }
+
+      // 敵移動
+      gameState.enemies.forEach(e => {
+        e.y += gameState.enemySpeed;
+        e.x += e.vx;
+        if (e.x < 0 || e.x > W - e.w) e.vx *= -1;
+      });
+
+      // アイテム移動
+      gameState.items.forEach(i => {
+        i.y += CONFIG.item.speed;
+      });
+
+      // 弾移動
+      gameState.bullets.forEach(b => {
+        b.y -= CONFIG.bullet.speed;
+        if (b.vx) b.x += b.vx;
+      });
+
+      // 画面外削除
+      gameState.enemies = gameState.enemies.filter(e => e.y < H + e.h);
+      gameState.items = gameState.items.filter(i => i.y < H + i.h);
+      gameState.bullets = gameState.bullets.filter(b => b.y > -b.h);
+
+      // 弾と敵の衝突
+      for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+        const b = gameState.bullets[i];
+        for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+          const e = gameState.enemies[j];
+          if (collides(b, e)) {
+            createExplosion(e.x + e.w/2, e.y + e.h/2, '#ff4757', 15);
+            gameState.enemies.splice(j, 1);
+            gameState.score += 10;
+            gameState.kills++; // 撃破数をインクリメント
+            gameState.bullets.splice(i, 1);
+            break;
+          }
+        }
+      }
+
+      // プレイヤーとアイテムの衝突
+      if (!gameState.inQuiz) {
+        for (let i = gameState.items.length - 1; i >= 0; i--) {
+          const item = gameState.items[i];
+          if (collides(gameState.player, item)) {
+            gameState.itemsCollected++;
+            createExplosion(item.x + item.w/2, item.y + item.h/2, '#ffa502', 20);
+            gameState.items.splice(i, 1);
+            openQuiz();
+            break;
+          }
+        }
+      }
+
+      // プレイヤーと敵の衝突
+      for (let k = gameState.enemies.length - 1; k >= 0; k--) {
+        const e = gameState.enemies[k];
+        if (collides(gameState.player, e)) {
+          if (gameState.barrierCount > 0) { // バリアが有効な場合
+            gameState.barrierCount--; // バリアを消費
+            gameState.enemies.splice(k, 1); // 敵を撃破
+            createExplosion(e.x + e.w/2, e.y + e.h/2, '#70a1ff', 20); // 青いエフェクト
+            gameState.shake = Math.min(10, gameState.shake + 8); // 強めの画面揺れ
+            
+            if (gameState.barrierCount === 0) {
+                gameState.barrierUntil = 0; // カウントが0になったらタイマーもリセット
+            }
+            // バリアが衝突を防いだのでゲームオーバーにはしない
+          } else {
+            // バリアがない場合、ゲームオーバー
+            gameState.gameOver = true;
+            gameState.running = false;
+            createExplosion(gameState.player.x + CONFIG.player.w/2, 
+                           gameState.player.y + CONFIG.player.h/2, 
+                           '#5352ed', 40);
+          }
+          // 衝突が発生したのでこの敵は終了 (バリアが防いだ場合も敵は消える)
+          break; 
+        }
+      }
+
+      // パーティクル更新
+      gameState.particles = gameState.particles.filter(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.1;
+        p.life -= dt / 1000;
+        return p.life > 0;
+      });
+
+      // 画面揺れ減衰
+      gameState.shake *= 0.9;
+    }
+
+    // ===== 描画 =====
+    function draw() {
+      // 画面揺れ
+      const shakeX = (Math.random() - 0.5) * gameState.shake;
+      const shakeY = (Math.random() - 0.5) * gameState.shake;
+      ctx.setTransform(1, 0, 0, 1, shakeX, shakeY);
+
+      // 背景
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#0a0e27');
+      grad.addColorStop(1, '#1e2a4a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      // 星（背景装飾）
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      for (let i = 0; i < 50; i++) {
+        const x = (i * 37) % W;
+        const y = ((i * 53 + gameState.time * 0.01) % H);
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      // 敵
+      gameState.enemies.forEach(e => {
+        ctx.fillStyle = '#ff4757';
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+        ctx.strokeStyle = '#ff6b81';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(e.x + 2, e.y + 2, e.w - 4, e.h - 4);
+      });
+
+      // アイテム（より目立つように）
+      gameState.items.forEach(item => {
+        const pulse = Math.sin(gameState.time * 0.005) * 0.3 + 0.7;
+        
+        // グロー効果
+        ctx.save();
+        ctx.shadowColor = '#ffa502';
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = `rgba(255, 165, 2, ${pulse})`;
+        ctx.fillRect(item.x, item.y, item.w, item.h);
+        ctx.restore();
+        
+        // 外枠
+        ctx.strokeStyle = '#ffcc00';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(item.x, item.y, item.w, item.h);
+        
+        // 中心の星マーク
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 20px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('★', item.x + item.w/2, item.y + item.h/2);
+      });
+
+      // 弾
+      ctx.fillStyle = '#2ed573';
+      gameState.bullets.forEach(b => {
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+      });
+
+      // プレイヤー
+      const isPowered = Date.now() < gameState.powerupUntil;
+      const isBarriered = gameState.barrierCount > 0;
+
+      // バリアエフェクト (青い盾)
+      if (isBarriered) {
+        const pulse = Math.sin(gameState.time * 0.01) * 0.1 + 0.4;
+        ctx.save();
+        ctx.shadowColor = 'var(--barrier)';
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = `rgba(112, 161, 255, ${pulse})`;
+        ctx.beginPath();
+        ctx.arc(gameState.player.x + CONFIG.player.w/2, 
+                gameState.player.y + CONFIG.player.h/2, 
+                CONFIG.player.w * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        ctx.strokeStyle = '#70a1ff';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(gameState.player.x + CONFIG.player.w/2, 
+                gameState.player.y + CONFIG.player.h/2, 
+                CONFIG.player.w * 0.8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      
+      // パワーアップオーラ
+      if (isPowered) {
+        const pulseSize = Math.sin(gameState.time * 0.01) * 8 + 8;
+        ctx.fillStyle = 'rgba(46,213,115,0.3)';
+        ctx.fillRect(gameState.player.x - pulseSize/2, 
+                     gameState.player.y - pulseSize/2, 
+                     CONFIG.player.w + pulseSize, 
+                     CONFIG.player.h + pulseSize);
+      }
+      
+      // プレイヤー本体
+      ctx.fillStyle = isPowered ? '#2ed573' : '#5352ed';
+      ctx.fillRect(gameState.player.x, gameState.player.y, CONFIG.player.w, CONFIG.player.h);
+      
+      // プレイヤー装飾
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(gameState.player.x + CONFIG.player.w/2 - 3, gameState.player.y + 5, 6, 10);
+
+      // パーティクル
+      gameState.particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+      });
+      ctx.globalAlpha = 1;
+
+      // UI
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      
+      ctx.fillStyle = '#f1f2f6';
+      ctx.font = 'bold 18px system-ui';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`スコア: ${gameState.score}`, 16, 30);
+      ctx.fillText(`時間: ${(gameState.time / 1000).toFixed(1)}s`, 16, 55);
+      ctx.fillText(`Lv: ${gameState.level}`, 16, 80);
+      ctx.fillText(`撃破数: ${gameState.kills}機`, 16, 105); // 撃破数表示
+      
+      ctx.textAlign = 'right';
+      ctx.fillText(`アイテム: ${gameState.itemsCollected}`, W - 16, 30);
+      
+      let nextY = 55;
+      
+      if (isPowered) {
+        const remaining = Math.ceil((gameState.powerupUntil - Date.now()) / 1000);
+        ctx.fillStyle = '#2ed573';
+        ctx.fillText(`パワーアップ: ${remaining}s`, W - 16, nextY);
+        nextY += 25;
+      }
+      
+      if (isBarriered) {
+        const remaining = Math.ceil((gameState.barrierUntil - Date.now()) / 1000);
+        ctx.fillStyle = '#70a1ff'; 
+        ctx.fillText(`バリア: ${gameState.barrierCount}回 (${remaining}s)`, W - 16, nextY);
+        nextY += 25;
+      }
+      
+      ctx.textAlign = 'left';
+      
+      // ウェーブ警告表示
+      if (gameState.isWaving && gameState.waveSpawnTimer > 0) {
+          const warnAlpha = Math.sin(gameState.time * 0.015) * 0.4 + 0.6; // 点滅
+          ctx.fillStyle = `rgba(255, 71, 87, ${warnAlpha})`; 
+          ctx.font = 'bold 36px system-ui';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('WARNING: ENEMY WAVE INCOMING!', W/2, H/4);
+      }
+
+      // ゲームオーバー
+      if (gameState.gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0, 0, W, H);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 48px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('GAME OVER', W/2, H/2 - 60);
+        
+        ctx.font = 'bold 24px system-ui';
+        ctx.fillStyle = '#ffa502';
+        ctx.fillText(`最終スコア: ${gameState.score}`, W/2, H/2 + 0);
+        
+        ctx.fillStyle = '#f1f2f6';
+        ctx.fillText(`撃破数: ${gameState.kills}機`, W/2, H/2 + 40); // 撃破数表示
+        ctx.fillText(`アイテム: ${gameState.itemsCollected}個`, W/2, H/2 + 80);
+        
+        ctx.font = '18px system-ui';
+        ctx.fillStyle = '#dfe4ea';
+        ctx.fillText('スペース、ボタン、またはタップでリスタート', W/2, H/2 + 130);
+        
+        ctx.textAlign = 'left';
+        
+        // ゲームオーバー時スペースまたはタップでリスタート
+        if ((gameState.keys.space && gameState.spacePressed) || gameState.tapped) {
+            resetGame();
+            gameState.tapped = false; // リスタート後に再度タップが必要
+        }
+      }
+    }
+
+    // ===== メインループ =====
+    let lastTime = performance.now();
+    function loop(now) {
+      const dt = now - lastTime;
+      lastTime = now;
+      
+      if (gameState.started) {
+        update(dt);
+      }
+      draw();
+      
+      requestAnimationFrame(loop);
+    }
+
+    // ゲームオーバー画面でのタップリスタート
+    canvas.addEventListener('click', () => {
+        if (gameState.gameOver) {
+            resetGame();
+        }
+    });
+
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
